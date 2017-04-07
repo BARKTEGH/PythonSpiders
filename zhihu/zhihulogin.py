@@ -20,6 +20,7 @@ class zhihulogin(object):
         self.post_data = None
         self.session = requests.Session()
         self.logger = self.createLogger('mylogger','temp/logger.log')
+        #self.session.cookies = cookielib.LWPCookieJar(filename='cookies')
         # 请求的头内容
         self.header =  {
         'Accept': '*/*',
@@ -70,11 +71,13 @@ class zhihulogin(object):
         resText = self.session.post(url,data=self.post_data, headers=self.header).content.decode('utf8')
         jsonText = json.loads(resText)
         if jsonText["r"] == 0:
+            '''
             # 把cookies添加到headers中
             cookies = self.session.cookies.get_dict()
             cookies = [key + "=" + value for key, value in cookies.items()]
             cookies = "; ".join(cookies)
             self.session.headers["Cookie"] = cookies
+            '''
             self.logger.info("Login success!")
         else:
             self.logger.error("Login Failed!")
