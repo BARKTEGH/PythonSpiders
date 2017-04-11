@@ -2,13 +2,17 @@
 '''
     使用request库进行模拟知乎登陆
     class zhihulogin 运行run,输入验证码，返回session和带有cookie的header,logger
+    添加cookie保存，可以不用每次都要输入账号密码
 '''
 from bs4 import BeautifulSoup as BS
 import json
 import requests
 import logging
+import cookielib
+import os
 proxies = {
-  "https": "https://113.69.39.5:808"
+    "https": "http://116.28.206.126:8998",
+    "https": "http://182.240.62.187:8998"
 }
 class zhihulogin(object):
     def __init__(self):
@@ -19,8 +23,9 @@ class zhihulogin(object):
         self._xsrf = None
         self.post_data = None
         self.session = requests.Session()
+        self.cookies = 'temp/cookie.txt'
+        self.session.cookies = cookielib.LWPCookieJar(filename=self.cookies)
         self.logger = self.createLogger('mylogger','temp/logger.log')
-        #self.session.cookies = cookielib.LWPCookieJar(filename='cookies')
         # 请求的头内容
         self.header =  {
         'Accept': '*/*',
@@ -32,6 +37,7 @@ class zhihulogin(object):
         'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/53.0.2785.116 Safari/537.36',
         'Host': 'www.zhihu.com'
         }
+
 
     def get_parm(self):
         response = self.session.get(self.url,headers=self.header).content
@@ -63,25 +69,31 @@ class zhihulogin(object):
             'captcha':raw_input("Please input captcha: ")
         }
     def run(self):
-        self.get_parm()
-        self.get_account_password()
-        self.get_captcha()
-        self.creat_posrdata()
-        url = r"https://www.zhihu.com/login/" + self.account_name
-        resText = self.session.post(url,data=self.post_data, headers=self.header).content.decode('utf8')
-        jsonText = json.loads(resText)
-        if jsonText["r"] == 0:
-            '''
-            # 把cookies添加到headers中
-            cookies = self.session.cookies.get_dict()
-            cookies = [key + "=" + value for key, value in cookies.items()]
-            cookies = "; ".join(cookies)
-            self.session.headers["Cookie"] = cookies
-            '''
-            self.logger.info("Login success!")
+        if not os.path.exists(self.cookies):
+            self.get_parm()
+            self.get_account_password()
+            self.get_captcha()
+            self.creat_posrdata()
+            url = r"https://www.zhihu.com/login/" + self.account_name
+            resText = self.session.post(url, data=self.post_data, headers=self.header).content.decode('utf8')
+            jsonText = json.loads(resText)
+            if jsonText["r"] == 0:
+                '''
+                # 把cookies添加到headers中
+                cookies = self.session.cookies.get_dict()
+                cookies = [key + "=" + value for key, value in cookies.items()]
+                cookies = "; ".join(cookies)
+                self.session.headers["Cookie"] = cookies
+                '''
+                self.session.cookies.save()
+                self.logger.info("Login success!")
+            else:
+                self.logger.error("Login Failed!")
+                self.logger.error("Error info ---> " + jsonText["msg"])
         else:
-            self.logger.error("Login Failed!")
-            self.logger.error("Error info ---> " + jsonText["msg"])
+            # "从 cookie 文件加载上次的 cookie，这样就不需要重复登陆"
+            r = self.session.cookies.load()
+            self.logger.info("Login success!")
         return self.session,self.header,self.logger
 
     def createLogger(self, logger_name, log_file):
@@ -101,10 +113,12 @@ class zhihulogin(object):
         logger.addHandler(ch)
         return logger
  #运行实例
+
 def main():
     zhihu = zhihulogin()
     session,headers,logger = zhihu.run()
-    r = session.get('https://www.zhihu.com/',headers=headers,timeout=10).content
+    r = session.get('https://www.zhihu.com/',headers=headers,
+                    timeout=10).content
     logger.info('开始')
     f=open('temp/home.html','w+')
     f.write(r)
