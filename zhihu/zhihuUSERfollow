@@ -1,0 +1,163 @@
+# -*- coding:utf-8 -*-
+from bs4 import BeautifulSoup
+import time
+import zhihuloginV_2
+import requests
+import json
+zhihu = zhihuloginV_2.zhihulogin()
+session,headers,logger = zhihu.run()
+
+def get_page(url):
+    response = session.get(url,headers=headers,timeout=10)
+    return response.content.decode('utf8')
+
+URL = ['https://www.zhihu.com/people/sgai',
+        'https://www.zhihu.com/people/excited-vczh']
+
+urllist = []
+crawledlist =[]
+#USEURL='https://www.zhihu.com/people/excited-vczh'
+#爬取一个用户的关注者和guanzhu他的人，以及个人信息
+class zhihhuUSERpage(object):
+
+    def __init__(self,userURL):
+        self.useURL = userURL
+        self.baseURL = 'https://www.zhihu.com'
+        self.username = ''
+        self.following_usernamelist = []
+        self.following_userlinklist = []
+        self.followers_usernamelist = []
+        self.followers_userlinklist = []
+        self.followingNum = ''
+        self.followersNum = ''
+        self.liulancishu = ''
+        self.token= None
+        self.followingpagenum = None
+        self.followerspagenum = None
+
+    def get_userdetail(self):
+        userpage = get_page(self.useURL+ '/following')
+        soup = BeautifulSoup(userpage,'html.parser')
+        self.username = soup.find(class_="ProfileHeader-name").get_text()
+        followingandersnum = soup.find_all(class_='NumberBoard-value')
+        self.followingNum = followingandersnum[0].string
+        self.followersNum = followingandersnum[1].string
+        self.token = self.useURL.split('/')[-1]
+        #得到用户关注的用户 页数
+        try:
+            followingpagenum= soup.find(class_='Button PaginationButton PaginationButton-next Button--plain')
+            self.followingpagenum = followingpagenum.previous_sibling.string
+        except:
+            self.followingpagenum = 1
+        #得到关注者页数
+        userpage2 = get_page(self.useURL+'/followers')
+        soup2 = BeautifulSoup(userpage2,'html.parser')
+        try:
+            followpagenum = soup.find(class_='Button PaginationButton PaginationButton-next Button--plain')
+            self.followerspagenum = followpagenum.previous_sibling.string
+        except:
+            self.followerspagenum = 1
+        print '用户为:', self.username
+        print 'URL:',self.useURL
+        print '关注了:',self.followingNum
+        print '关注者:',self.followersNum
+        print  '----'*3
+
+    #得到用户关注的用户名字与URL
+    def get_following(self):
+        print '---the following ---'
+        for i in range(int(self.followingpagenum)):
+            offset= i *20
+            followingpageURL='https://www.zhihu.com/api/v4/members/'+self.token+'/followees?' \
+                'include=data%5B*%5D.answer_count%2Carticles_count%2Cgender%' \
+                '2Cfollower_count%2Cis_followed%2Cis_following%2Cbadge%5B%3F' \
+                '(type%3Dbest_answerer)%5D.topics&offset='+str(offset)+'&limit=20'
+            followingjson = get_page(followingpageURL)
+            follweedatajson = json.loads(followingjson)
+            for data in follweedatajson['data']:
+                following_username = data['name']
+                self.following_usernamelist.append(following_username)
+                print '用户关注的人：',following_username
+                following_usertoken = data['url_token']
+                follwing_user_type = data['user_type']
+                if follwing_user_type == 'people':
+                    following_userURL = self.baseURL +'/people/'+ following_usertoken
+                if follwing_user_type =='organization':
+                    following_userURL = self.baseURL + '/org/' + following_usertoken
+                print '个人主页:',following_userURL
+                self.following_userlinklist.append(following_userURL)
+                # 插入到爬取list中
+                if following_userURL not in urllist:
+                    urllist.append(following_userURL)
+
+
+    #得到关注者的名字与URL
+    def get_followers(self):
+        print '----the followers---'
+        for i in range(int(self.followerspagenum)):
+            offset = i * 20
+            followerspageURL = 'https://www.zhihu.com/api/v4/members/' + self.token +\
+                               '/followers?include=data%5B*%5D.answer_count%2Carticles_count' \
+                               '%2Cgender%2Cfollower_count%2Cis_followed%2Cis_following%2Cbadge' \
+                               '%5B%3F(type%3Dbest_answerer)%5D.topics&offset=' + str(offset) + '&limit=20'
+            followersjson = get_page(followerspageURL)
+            follwersdatajson = json.loads(followersjson)
+            for data in follwersdatajson['data']:
+                followers_username = data['name']
+                self.followers_usernamelist.append(followers_username)
+                print '用户关注的人：', followers_username
+                followers_usertoken = data['url_token']
+                follwers_user_type = data['user_type']
+                if follwers_user_type == 'people':
+                    followers_userURL = self.baseURL + '/people/' + followers_usertoken
+                if follwers_user_type == 'organization':
+                    followers_userURL = self.baseURL + '/org/' + followers_usertoken
+                print '个人主页:', followers_userURL
+                self.followers_userlinklist.append(followers_userURL)
+                # 插入到爬取list中
+                if followers_userURL not in urllist:
+                    urllist.append(followers_userURL)
+
+    def saveUSer(self):
+        with open('temp/'+self.username.encode('gbk')+'.txt','w+') as f:
+            f.write('个人信息为:\n')
+            f.write('name:'+self.username.encode('utf8')+'\n')
+            f.write('关注了:'+self.followingNum.encode('utf8'))
+            f.write('关注者:'+self.followersNum.encode('utf8')+'\n')
+            f.write('the following:'+time.ctime()+'--------\n')
+            try:
+                for i in xrange(len(self.following_usernamelist)):
+                    f.write('name:'+self.following_usernamelist[i].encode('utf8')+' | ')
+                    f.write('USer-link:'+self.following_userlinklist[i].encode('utf8')+'\n')
+            except:
+                f.write('no following\n')
+            f.write('------------------\n')
+            f.write('the followers:'+time.ctime()+'\n')
+            try:
+                for i in xrange(len(self.followers_usernamelist)):
+                    f.write('name:'+self.followers_usernamelist[i].encode('utf8')+' | ')
+                    f.write('user-link:'+self.followers_userlinklist[i].encode('utf8')+'\n')
+            except:
+                f.write('no followers')
+        print self.username,'信息存储完毕',time.ctime()
+
+
+def main():
+    for url in URL:
+        urllist.append(url)
+    for url in urllist:
+        print '开始爬取此用户',time.ctime()
+        if url in crawledlist:
+            print '此用户已经爬取'
+            continue
+        crawledlist.append(url)
+        zhihu = zhihhuUSERpage(url)
+        zhihu.get_userdetail()
+        zhihu.get_following()
+        zhihu.get_followers()
+        print 'save user information'
+        zhihu.saveUSer()
+        time.sleep(10)
+
+if __name__ == '__main__':
+    main()
